@@ -49,6 +49,15 @@ export GITHUB_TOKEN="your-github-token"
 ./scripts/safenow-integration.sh
 ```
 
+#### Prerequisites
+
+The local script requires the following tools to be installed:
+- `curl` - for making HTTP requests
+- `jq` - for parsing JSON responses
+  - Install on Debian/Ubuntu: `apt-get install jq`
+  - Install on macOS: `brew install jq`
+  - Install on other systems: See [jq download page](https://stedolan.github.io/jq/download/)
+
 #### Optional Environment Variables
 
 You can customize the script behavior with these environment variables:

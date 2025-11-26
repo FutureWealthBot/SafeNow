@@ -50,7 +50,9 @@ jobs:
           DOC_ID: ${{ github.event.inputs.doc_id }}
         run: |
           echo "Testing SafeNow API..."
-          SAFE_NOW_RESPONSE=$(curl -s -X POST https://api.safenow.futurewealthbot.com/consent/request \
+          
+          # Make the API call and capture both response and HTTP status
+          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST https://api.safenow.futurewealthbot.com/consent/request \
             -H "Authorization: Bearer $SAFENOW_API_KEY" \
             -H "Content-Type: application/json" \
             -d "{
@@ -59,9 +61,19 @@ jobs:
                   \"document_ids\": [\"$DOC_ID\"]
                 }")
           
-          echo "SafeNow API Response:"
+          # Extract HTTP status code (last line) and response body (all but last line)
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+          SAFE_NOW_RESPONSE=$(echo "$HTTP_RESPONSE" | sed '$d')
+          
+          echo "SafeNow API Response (Status: $HTTP_STATUS):"
           echo "$SAFE_NOW_RESPONSE"
           echo "---------------------------------"
+          
+          # Check if API call was successful (2xx status codes)
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "Error: SafeNow API request failed with status $HTTP_STATUS"
+            exit 1
+          fi
           
           # Save response for later steps
           echo "response=$SAFE_NOW_RESPONSE" >> $GITHUB_OUTPUT
@@ -87,13 +99,16 @@ jobs:
             echo "Pull Request already exists: #$EXISTING_PR"
             echo "pr_number=$EXISTING_PR" >> $GITHUB_OUTPUT
           else
-            # Create new PR
-            PR_NUMBER=$(gh pr create \
+            # Create new PR and extract PR number
+            PR_URL=$(gh pr create \
               --title "$PR_TITLE" \
               --body "$PR_BODY" \
               --base "$BASE_BRANCH" \
               --head "$FEATURE_BRANCH" \
-              --repo ${{ github.repository }} | grep -oP '(?<=pull/)\d+')
+              --repo ${{ github.repository }})
+            
+            # Extract PR number from URL (format: https://github.com/owner/repo/pull/NUMBER)
+            PR_NUMBER=$(echo "$PR_URL" | sed 's|.*/pull/||')
             
             if [ -z "$PR_NUMBER" ]; then
               echo "Failed to create PR"
@@ -116,8 +131,22 @@ jobs:
         run: |
           echo "Merging Pull Request #$PR_NUMBER..."
           
-          # Wait a moment for PR to be ready
-          sleep 2
+          # Check PR status and wait if necessary
+          for i in {1..10}; do
+            PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq '.state' --repo ${{ github.repository }})
+            echo "PR State: $PR_STATE (attempt $i/10)"
+            
+            if [ "$PR_STATE" = "OPEN" ]; then
+              break
+            fi
+            
+            if [ "$i" -eq 10 ]; then
+              echo "Error: PR is not in OPEN state after waiting"
+              exit 1
+            fi
+            
+            sleep 2
+          done
           
           # Merge the PR
           gh pr merge "$PR_NUMBER" \

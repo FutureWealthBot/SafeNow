@@ -39,11 +39,25 @@ if [ -z "$GITHUB_TOKEN" ]; then
   exit 1
 fi
 
+# Check for required dependencies
+if ! command -v jq &> /dev/null; then
+  echo "Error: jq is required but not installed. Please install jq to use this script."
+  echo "Installation: apt-get install jq (Debian/Ubuntu) or brew install jq (macOS)"
+  exit 1
+fi
+
+if ! command -v curl &> /dev/null; then
+  echo "Error: curl is required but not installed."
+  exit 1
+fi
+
 # -----------------------------
 # 1. Test SafeNow Consent API
 # -----------------------------
 echo "Testing SafeNow API..."
-SAFE_NOW_RESPONSE=$(curl -s -X POST https://api.safenow.futurewealthbot.com/consent/request \
+
+# Make the API call and capture both response and HTTP status
+HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST https://api.safenow.futurewealthbot.com/consent/request \
   -H "Authorization: Bearer $SAFENOW_API_KEY" \
   -H "Content-Type: application/json" \
   -d "{
@@ -52,9 +66,19 @@ SAFE_NOW_RESPONSE=$(curl -s -X POST https://api.safenow.futurewealthbot.com/cons
         \"document_ids\": [\"$DOC_ID\"]
       }")
 
-echo "SafeNow API Response:"
+# Extract HTTP status code (last line) and response body (all but last line)
+HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+SAFE_NOW_RESPONSE=$(echo "$HTTP_RESPONSE" | sed '$d')
+
+echo "SafeNow API Response (Status: $HTTP_STATUS):"
 echo "$SAFE_NOW_RESPONSE"
 echo "---------------------------------"
+
+# Check if API call was successful (2xx status codes)
+if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+  echo "Error: SafeNow API request failed with status $HTTP_STATUS"
+  exit 1
+fi
 
 # -----------------------------
 # 2. Create GitHub Pull Request
