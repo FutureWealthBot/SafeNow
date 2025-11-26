@@ -97,6 +97,10 @@ Learn more in our [documentation (docs.blazity.com)][docs] how to quickstart wit
 #### All-time contributors
 [bmstefanski](https://github.com/bmstefanski)
 
+## SafeNow Integration
+
+This repository includes integration with SafeNow API for consent management and automated PR workflows. See [docs/SAFENOW_INTEGRATION.md](docs/SAFENOW_INTEGRATION.md) for detailed documentation.
+
 ## License
 
 MIT
