@@ -1,0 +1,129 @@
+name: SafeNow Integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      user_id:
+        description: 'User ID for SafeNow consent request'
+        required: false
+        default: '12345'
+      doc_id:
+        description: 'Document ID for SafeNow consent request'
+        required: false
+        default: 'doc_9876'
+      feature_branch:
+        description: 'Feature branch to merge'
+        required: false
+        default: 'feature/safenow-integration'
+      base_branch:
+        description: 'Base branch to merge into'
+        required: false
+        default: 'main'
+      pr_title:
+        description: 'Pull Request title'
+        required: false
+        default: 'Merge SafeNow Integration'
+      pr_body:
+        description: 'Pull Request body'
+        required: false
+        default: 'Automated PR via API for SafeNow integration.'
+
+jobs:
+  safenow-integration:
+    name: SafeNow API Test & PR Merge
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # -----------------------------
+      # 1. Test SafeNow Consent API
+      # -----------------------------
+      - name: Test SafeNow Consent API
+        id: safenow-test
+        env:
+          SAFENOW_API_KEY: ${{ secrets.SAFENOW_API_KEY }}
+          USER_ID: ${{ github.event.inputs.user_id }}
+          DOC_ID: ${{ github.event.inputs.doc_id }}
+        run: |
+          echo "Testing SafeNow API..."
+          SAFE_NOW_RESPONSE=$(curl -s -X POST https://api.safenow.futurewealthbot.com/consent/request \
+            -H "Authorization: Bearer $SAFENOW_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+                  \"user_id\": \"$USER_ID\",
+                  \"purpose\": \"financial_analysis\",
+                  \"document_ids\": [\"$DOC_ID\"]
+                }")
+          
+          echo "SafeNow API Response:"
+          echo "$SAFE_NOW_RESPONSE"
+          echo "---------------------------------"
+          
+          # Save response for later steps
+          echo "response=$SAFE_NOW_RESPONSE" >> $GITHUB_OUTPUT
+
+      # -----------------------------
+      # 2. Create GitHub Pull Request
+      # -----------------------------
+      - name: Create GitHub Pull Request
+        id: create-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FEATURE_BRANCH: ${{ github.event.inputs.feature_branch }}
+          BASE_BRANCH: ${{ github.event.inputs.base_branch }}
+          PR_TITLE: ${{ github.event.inputs.pr_title }}
+          PR_BODY: ${{ github.event.inputs.pr_body }}
+        run: |
+          echo "Creating GitHub Pull Request..."
+          
+          # Check if PR already exists
+          EXISTING_PR=$(gh pr list --head "$FEATURE_BRANCH" --base "$BASE_BRANCH" --json number --jq '.[0].number')
+          
+          if [ -n "$EXISTING_PR" ] && [ "$EXISTING_PR" != "null" ]; then
+            echo "Pull Request already exists: #$EXISTING_PR"
+            echo "pr_number=$EXISTING_PR" >> $GITHUB_OUTPUT
+          else
+            # Create new PR
+            PR_NUMBER=$(gh pr create \
+              --title "$PR_TITLE" \
+              --body "$PR_BODY" \
+              --base "$BASE_BRANCH" \
+              --head "$FEATURE_BRANCH" \
+              --repo ${{ github.repository }} | grep -oP '(?<=pull/)\d+')
+            
+            if [ -z "$PR_NUMBER" ]; then
+              echo "Failed to create PR"
+              exit 1
+            fi
+            
+            echo "Pull Request #$PR_NUMBER created successfully!"
+            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          fi
+          echo "---------------------------------"
+
+      # -----------------------------
+      # 3. Merge Pull Request
+      # -----------------------------
+      - name: Merge Pull Request
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.create-pr.outputs.pr_number }}
+          PR_TITLE: ${{ github.event.inputs.pr_title }}
+        run: |
+          echo "Merging Pull Request #$PR_NUMBER..."
+          
+          # Wait a moment for PR to be ready
+          sleep 2
+          
+          # Merge the PR
+          gh pr merge "$PR_NUMBER" \
+            --merge \
+            --subject "$PR_TITLE" \
+            --repo ${{ github.repository }}
+          
+          echo "Pull Request #$PR_NUMBER merged successfully!"
+          echo "✅ SafeNow test + PR merge workflow completed successfully!"
