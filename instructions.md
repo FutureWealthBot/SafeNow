@@ -75,7 +75,7 @@ POLLING.ENABLE --channel API.LIVE --interval 60s
 
 ```bash
 # Push policies and artifacts to production simulation
-APIF QEP QEC PUSH —all
+APIF QEP QEC PUSH --all
 ```
 
 #### Command Reference Table
@@ -107,7 +107,7 @@ APIF QEP QEC PUSH —all
 
 1. Execute QEC PUSH command:
    ```bash
-   APIF QEP QEC PUSH —all
+   APIF QEP QEC PUSH --all
    ```
 
 2. Confirm receipt via push log:
